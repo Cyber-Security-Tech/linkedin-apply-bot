@@ -1,68 +1,78 @@
+import os
+import time
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
-from dotenv import load_dotenv
-import os
-import time
+from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
 
-# Load credentials
+# Load environment variables
 load_dotenv()
-EMAIL = os.getenv("LINKEDIN_EMAIL")
-PASSWORD = os.getenv("LINKEDIN_PASSWORD")
+EMAIL = os.getenv("EMAIL")
+PASSWORD = os.getenv("PASSWORD")
 
 if not EMAIL or not PASSWORD:
-    raise ValueError("Please make sure LINKEDIN_EMAIL and LINKEDIN_PASSWORD are set in .env")
+    raise ValueError("Please set EMAIL and PASSWORD in your .env file.")
 
-# Set up the driver
+# Setup Chrome
 options = Options()
-options.add_experimental_option("detach", True)
+options.add_argument("--start-maximized")
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-# Step 1: Go to LinkedIn Jobs page (public)
-driver.get("https://www.linkedin.com/jobs/search/?keywords=python%20developer&location=United%20States&f_AL=true")
-time.sleep(3)
-
-# Step 2: Wait for overlay and remove if needed
 try:
-    overlay = driver.find_element(By.CLASS_NAME, "modal__overlay")
-    if overlay.is_displayed():
-        print("⚠️ Overlay detected. Waiting for it to disappear...")
-        time.sleep(2)
-        driver.execute_script("""
-            document.querySelector('.modal__overlay').style.display = 'none';
-        """)
-        print("✅ Overlay removed via JS.")
-except:
-    print("✅ No overlay found.")
+    print("🔗 Opening LinkedIn...")
+    driver.get("https://www.linkedin.com")
 
-# Step 3: Click sign in using JS to avoid interception
-try:
-    sign_in_btn = driver.find_element(By.LINK_TEXT, "Sign in")
-    driver.execute_script("arguments[0].scrollIntoView();", sign_in_btn)
-    driver.execute_script("arguments[0].click();", sign_in_btn)
-    print("✅ Clicked Sign in")
-except Exception as e:
-    print(f"❌ Failed to click Sign in: {e}")
-    driver.quit()
-    exit()
+    time.sleep(3)
+    print("⚠️ Checking for overlay...")
+    try:
+        overlay = driver.find_element(By.CLASS_NAME, "modal__overlay")
+        if overlay.is_displayed():
+            print("⚠️ Overlay detected, attempting to dismiss with ESC key...")
+            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+            time.sleep(2)
+    except NoSuchElementException:
+        print("✅ No overlay detected.")
 
-# Step 4: Fill login form
-time.sleep(3)
-try:
+    try:
+        sign_in = driver.find_element(By.LINK_TEXT, "Sign in")
+        sign_in.click()
+        print("✅ Clicked Sign in")
+    except ElementClickInterceptedException:
+        print("❌ Login failed: Sign in button was blocked.")
+        driver.quit()
+        exit()
+
+    time.sleep(3)
+
     email_input = driver.find_element(By.ID, "username")
     password_input = driver.find_element(By.ID, "password")
-
     email_input.send_keys(EMAIL)
     password_input.send_keys(PASSWORD)
     password_input.send_keys(Keys.RETURN)
 
+    time.sleep(5)
     print("✅ Logged in successfully!")
-except Exception as e:
-    print(f"❌ Login error: {e}")
 
-# Pause to see result
-input("⏸️ Press ENTER to quit browser...")
-driver.quit()
+    print("⏳ Waiting 5 seconds before navigating to job search page...")
+    time.sleep(5)
+
+    try:
+        driver.get("https://www.linkedin.com/jobs/search/?keywords=python%20developer&location=United%20States&f_AL=true")
+        print("✅ Reached job search page.")
+    except Exception as e:
+        print(f"❌ Failed to load job search page: {e}")
+        driver.quit()
+        exit()
+
+    input("⏸️ Press ENTER to quit browser...")
+
+except Exception as e:
+    print(f"❌ Unexpected error: {e}")
+
+finally:
+    driver.quit()
